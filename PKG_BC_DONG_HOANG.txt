@@ -1,0 +1,1074 @@
+create or replace PACKAGE BODY pkg_bc_dong_tckt_hoang AS
+    /*
+      -- Mã/Tên chức năng: TCKT_BC_33 – Báo cáo tình hình tài chính
+      -- Người sửa: HoangV
+      -- Ngày sửa: 14/07/2021-
+    */
+    PROCEDURE prc_bao_cao_tinh_hinh_tai_chinh(
+        p_ma_dvhq VARCHAR2,
+        p_nam DATE
+    ) AS
+    BEGIN
+        --Lay du lieu dau nam cuoi nam, dau nam tai khoan no, co
+        INSERT INTO tbr_tc_bc_002 (id_chi_tieu,
+                                   cap_tong_hop,
+                                   so_cuoi_nam,
+                                   so_dau_nam,
+                                   thuoc_tinh_11)
+        SELECT id,
+               cap_tong_hop,
+               SUM(nvl(so_cuoi_nam, 0)) so_cuoi_nam,
+               SUM(nvl(so_dau_nam, 0))  so_dau_nam,
+               thuoc_tinh_11
+        FROM (
+                 SELECT ct.id,
+                        ct.cap_tong_hop,
+                        decode(ctct.thuoc_tinh_1, 'N', SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)),
+                               'C',
+                               SUM(nvl(ht.so_tien_vnd_co, 0)) - SUM(nvl(ht.so_tien_vnd_no, 0))) so_cuoi_nam,
+                        0                                                                       so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM tbd_tc_ht ht,
+                      tbs_sys_bc_chi_tieu ct,
+                      tbs_sys_bc_chi_tieu_cthuc ctct
+                 WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                   AND ct.ma_bao_cao = 'TCKT_BC_33'
+                   AND ct.id = ctct.chi_tieu_id
+                   AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                     SELECT *
+                     FROM
+                         split(ctct.ma_tk)
+                 )
+                   AND ctct.thuoc_tinh_1 IN ('N', 'C')
+                   AND ht.ngay_ht BETWEEN trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR') AND add_months(trunc(
+                                                                                                                    nvl(p_nam, TO_DATE('1900', 'YYYY')),
+                                                                                                                    'YEAR') -
+                                                                                                            1, 12)
+                 GROUP BY ct.id,
+                          ct.cap_tong_hop,
+                          ctct.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+                 UNION ALL
+                 SELECT ct.id,
+                        ct.cap_tong_hop,
+                        0 AS                                                                    so_cuoi_nam,
+                        decode(ctct.thuoc_tinh_1, 'N', SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)),
+                               'C',
+                               SUM(nvl(ht.so_tien_vnd_co, 0)) - SUM(nvl(ht.so_tien_vnd_no, 0))) so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM tbd_tc_ht ht,
+                      tbs_sys_bc_chi_tieu ct,
+                      tbs_sys_bc_chi_tieu_cthuc ctct
+                 WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                   AND ct.ma_bao_cao = 'TCKT_BC_33'
+                   AND ct.id = ctct.chi_tieu_id
+                   AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                     SELECT *
+                     FROM
+                         split(ctct.ma_tk)
+                 )
+                   AND ctct.thuoc_tinh_1 IN ('N', 'C')
+                   AND ht.ngay_ht BETWEEN add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR'), -
+                     12) AND add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR') - 1, 0)
+                 GROUP BY ct.id,
+                          ct.cap_tong_hop,
+                          ctct.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+                 UNION ALL
+                 SELECT dl.id,
+                        ct.cap_tong_hop,
+                        decode(dl.thuoc_tinh_1, 'LTN', SUM(nvl(dl.so_du_no, 0)), 'LTC',
+                               SUM(nvl(dl.so_du_co, 0))) so_cuoi_nam,
+                        0                                so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM (
+                          SELECT st.id,
+                                 st.dttk,
+                                 decode(st.so_tien - abs(st.so_tien), 0, st.so_tien, 0)      so_du_no,
+                                 decode(st.so_tien + abs(st.so_tien), 0, abs(st.so_tien), 0) so_du_co,
+                                 st.thuoc_tinh_1
+                          FROM (
+                                   SELECT ct.id,
+                                          ht.dttk,
+                                          SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)) so_tien,
+                                          ctct.thuoc_tinh_1
+                                   FROM tbd_tc_ht ht,
+                                        tbs_sys_bc_chi_tieu ct,
+                                        tbs_sys_bc_chi_tieu_cthuc ctct
+                                   WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                                     AND ct.ma_bao_cao = 'TCKT_BC_33'
+                                     AND ct.id = ctct.chi_tieu_id
+                                     AND ctct.ma_tk_loai_tru IS NOT NULL
+                                     AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                                       SELECT *
+                                       FROM
+                                           split(ctct.ma_tk)
+                                   )
+                                     AND ctct.ma_tk_loai_tru IS NOT NULL
+                                     AND ht.ngay_ht BETWEEN trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR')
+                                       AND add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR') - 1, 12)
+                                   GROUP BY ht.dttk,
+                                            ct.id,
+                                            ctct.thuoc_tinh_1
+                               ) st
+                      ) dl,
+                      tbs_sys_bc_chi_tieu ct
+                 WHERE dl.id = ct.id
+                 GROUP BY dl.id,
+                          ct.cap_tong_hop,
+                          dl.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+                 UNION ALL
+                 SELECT dl.id,
+                        ct.cap_tong_hop,
+                        0                                so_cuoi_nam,
+                        decode(dl.thuoc_tinh_1, 'LTN', SUM(nvl(dl.so_du_no, 0)), 'LTC',
+                               SUM(nvl(dl.so_du_co, 0))) so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM (
+                          SELECT st.id,
+                                 st.dttk,
+                                 decode(st.so_tien - abs(st.so_tien), 0, st.so_tien, 0)      so_du_no,
+                                 decode(st.so_tien + abs(st.so_tien), 0, abs(st.so_tien), 0) so_du_co,
+                                 st.thuoc_tinh_1
+                          FROM (
+                                   SELECT ct.id,
+                                          ht.dttk,
+                                          SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)) so_tien,
+                                          ctct.thuoc_tinh_1
+                                   FROM tbd_tc_ht ht,
+                                        tbs_sys_bc_chi_tieu ct,
+                                        tbs_sys_bc_chi_tieu_cthuc ctct
+                                   WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                                     AND ct.ma_bao_cao = 'TCKT_BC_33'
+                                     AND ct.id = ctct.chi_tieu_id
+                                     AND ctct.ma_tk_loai_tru IS NOT NULL
+                                     AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                                       SELECT *
+                                       FROM
+                                           split(ctct.ma_tk)
+                                   )
+                                     AND substr(ctct.thuoc_tinh_1, 1, 2) = 'LT'
+                                     AND (ctct.ma_tk_loai_tru IS NOT NULL)
+                                     AND ht.ngay_ht BETWEEN add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')),
+                                                                             'YEAR'), - 12) AND add_months(
+                                               trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')),
+                                                     'YEAR') - 1,
+                                               0)
+                                   GROUP BY ht.dttk,
+                                            ct.id,
+                                            ctct.thuoc_tinh_1
+                               ) st
+                      ) dl,
+                      tbs_sys_bc_chi_tieu ct
+                 WHERE dl.id = ct.id
+                 GROUP BY dl.id,
+                          ct.cap_tong_hop,
+                          dl.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+                 UNION ALL
+                 SELECT dl.id,
+                        ct.cap_tong_hop,
+                        decode(dl.thuoc_tinh_1, 'LTN', SUM(nvl(dl.so_du_no, 0)), 'LTC',
+                               SUM(nvl(dl.so_du_co, 0))) so_cuoi_nam,
+                        0                                so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM (
+                          SELECT st.id,
+                                 decode(st.so_tien - abs(st.so_tien), 0, st.so_tien, 0)      so_du_no,
+                                 decode(st.so_tien + abs(st.so_tien), 0, abs(st.so_tien), 0) so_du_co,
+                                 st.thuoc_tinh_1
+                          FROM (
+                                   SELECT ct.id,
+                                          SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)) so_tien,
+                                          ctct.thuoc_tinh_1
+                                   FROM tbd_tc_ht ht,
+                                        tbs_sys_bc_chi_tieu ct,
+                                        tbs_sys_bc_chi_tieu_cthuc ctct
+                                   WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                                     AND ct.ma_bao_cao = 'TCKT_BC_33'
+                                     AND ct.id = ctct.chi_tieu_id
+                                     AND ctct.ma_tk_loai_tru IS NULL
+                                     AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                                       SELECT *
+                                       FROM
+                                           split(ctct.ma_tk)
+                                   )
+                                     AND substr(ctct.thuoc_tinh_1, 1, 2) = 'LT'
+                                     AND ctct.ma_tk_loai_tru IS NULL
+                                     AND ht.ngay_ht BETWEEN trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR')
+                                       AND add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')), 'YEAR') - 1, 12)
+                                   GROUP BY ct.id,
+                                            ctct.thuoc_tinh_1
+                               ) st
+                      ) dl,
+                      tbs_sys_bc_chi_tieu ct
+                 WHERE dl.id = ct.id
+                 GROUP BY dl.id,
+                          ct.cap_tong_hop,
+                          dl.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+                 UNION ALL
+                 SELECT dl.id,
+                        ct.cap_tong_hop,
+                        0                                so_cuoi_nam,
+                        decode(dl.thuoc_tinh_1, 'LTN', SUM(nvl(dl.so_du_no, 0)), 'LTC',
+                               SUM(nvl(dl.so_du_co, 0))) so_dau_nam,
+                        ct.thuoc_tinh_11
+                 FROM (
+                          SELECT st.id,
+                                 decode(st.so_tien - abs(st.so_tien), 0, st.so_tien, 0)      so_du_no,
+                                 decode(st.so_tien + abs(st.so_tien), 0, abs(st.so_tien), 0) so_du_co,
+                                 st.thuoc_tinh_1
+                          FROM (
+                                   SELECT ct.id,
+                                          SUM(nvl(ht.so_tien_vnd_no, 0)) - SUM(nvl(ht.so_tien_vnd_co, 0)) so_tien,
+                                          ctct.thuoc_tinh_1
+                                   FROM tbd_tc_ht ht,
+                                        tbs_sys_bc_chi_tieu ct,
+                                        tbs_sys_bc_chi_tieu_cthuc ctct
+                                   WHERE ht.ma_dvhq = nvl(p_ma_dvhq, '00')
+                                     AND ct.ma_bao_cao = 'TCKT_BC_33'
+                                     AND ct.id = ctct.chi_tieu_id
+                                     AND ctct.ma_tk_loai_tru IS NULL
+                                     AND substr(ht.ma_tk, 1, ctct.thuoc_tinh_5) IN (
+                                       SELECT *
+                                       FROM
+                                           split(ctct.ma_tk)
+                                   )
+                                     AND substr(ctct.thuoc_tinh_1, 1, 2) = 'LT'
+                                     AND ctct.ma_tk_loai_tru IS NULL
+                                     AND ht.ngay_ht BETWEEN add_months(trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')),
+                                                                             'YEAR'), - 12) AND add_months(
+                                               trunc(nvl(p_nam, TO_DATE('1900', 'YYYY')),
+                                                     'YEAR') - 1, 0)
+                                   GROUP BY ct.id,
+                                            ctct.thuoc_tinh_1
+                               ) st
+                      ) dl,
+                      tbs_sys_bc_chi_tieu ct
+                 WHERE dl.id = ct.id
+                 GROUP BY dl.id,
+                          ct.cap_tong_hop,
+                          dl.thuoc_tinh_1,
+                          ct.thuoc_tinh_11
+             )
+        GROUP BY id,
+                 cap_tong_hop,
+                 thuoc_tinh_11;
+
+
+        --Tinh tong theo cap
+        INSERT INTO tbr_tc_bc_002 (id_chi_tieu,
+                                   cap_tong_hop,
+                                   so_cuoi_nam,
+                                   so_dau_nam,
+                                   thuoc_tinh_11)
+        SELECT ct.id,
+               ct.cap_tong_hop,
+               SUM(nvl(dl.so_cuoi_nam, 0)) so_cuoi_nam,
+               SUM(nvl(dl.so_dau_nam, 0))  so_dau_nam,
+               ct.thuoc_tinh_11
+        FROM tbr_tc_bc_002 dl,
+             tbs_sys_bc_chi_tieu ct
+        WHERE dl.thuoc_tinh_11 = ct.id
+          AND dl.cap_tong_hop = '4'
+        GROUP BY dl.thuoc_tinh_11,
+                 ct.id,
+                 ct.cap_tong_hop,
+                 ct.thuoc_tinh_11;
+
+        INSERT INTO tbr_tc_bc_002 (id_chi_tieu,
+                                   cap_tong_hop,
+                                   so_cuoi_nam,
+                                   so_dau_nam,
+                                   thuoc_tinh_11)
+        SELECT ct.id,
+               ct.cap_tong_hop,
+               SUM(nvl(dl.so_cuoi_nam, 0)) so_cuoi_nam,
+               SUM(nvl(dl.so_dau_nam, 0))  so_dau_nam,
+               ct.thuoc_tinh_11
+        FROM tbr_tc_bc_002 dl,
+             tbs_sys_bc_chi_tieu ct
+        WHERE dl.thuoc_tinh_11 = ct.id
+          AND dl.cap_tong_hop = '3'
+        GROUP BY dl.thuoc_tinh_11,
+                 ct.id,
+                 ct.cap_tong_hop,
+                 ct.thuoc_tinh_11;
+
+        INSERT INTO tbr_tc_bc_002 (id_chi_tieu,
+                                   cap_tong_hop,
+                                   so_cuoi_nam,
+                                   so_dau_nam,
+                                   thuoc_tinh_1,
+                                   thuoc_tinh_11)
+        SELECT ct.id,
+               ct.cap_tong_hop,
+               SUM(nvl(dl.so_cuoi_nam, 0)) so_cuoi_nam,
+               SUM(nvl(dl.so_dau_nam, 0))  so_dau_nam,
+               'tong3',
+               ct.thuoc_tinh_11
+        FROM tbr_tc_bc_002 dl,
+             tbs_sys_bc_chi_tieu ct
+        WHERE dl.thuoc_tinh_11 = ct.id
+          AND dl.cap_tong_hop = '2'
+        GROUP BY dl.thuoc_tinh_11,
+                 ct.id,
+                 ct.cap_tong_hop,
+                 ct.thuoc_tinh_11;
+
+    END;
+
+
+    /*
+  -- Mã/Tên chức năng: TCKT_BC_52 –Báo cáo tổng hợp tình hình thu chi các quỹ và các nguồn trong thanh toán
+  -- Người sửa: HoangV
+  -- Ngày sửa: 04/08/2021
+  */
+    PROCEDURE prc_bao_cao_tong_hop_tinh_hinh_thu_chi(
+        p_ma_dvhq VARCHAR2,
+        p_nam DATE
+    ) AS
+        v_tong_cap          NUMBER;
+        v_kiem_tra_khac_cap NUMBER;
+    BEGIN
+        --Tinh chi tieu co cong thuc con
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  CAP_TONG_HOP,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_11)
+        SELECT ct.ID            AS ID,
+               ct.CAP_TONG_HOP  AS CAP_TONG_HOP,
+               SUM((
+                   SELECT SUM(DECODE(PHEP_TOAN, '+', NVL((
+                                                             SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                                                           SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                                                           'C',
+                                                                           SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                                                           SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                                                           'C-N',
+                                                                           SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                                                           0)
+                                                             FROM TBD_TC_HT ht,
+                                                                  TBS_DM_DT dt,
+                                                                  TBS_SYS_BC_CHI_TIEU_CTHUC ctct1
+                                                             WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                                                               AND ht.DT_ID = dt.ID
+                                                               AND ctct1.ID = ID_CTCT
+                                                               AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct1.THUOC_TINH_9)))
+                                                               AND ((ctct1.THUOC_TINH_10 IS NOT NULL AND
+                                                                     REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct1.THUOC_TINH_10))
+                                                                 OR (ctct1.THUOC_TINH_10 IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                                                               AND ((ctct1.THUOC_TINH_11 IS NOT NULL AND
+                                                                     NOT REGEXP_LIKE(ht.MA_TK, ctct1.THUOC_TINH_11))
+                                                                 OR (ctct1.THUOC_TINH_11 IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                                                               AND ((ctct1.THUOC_TINH_12 IS NOT NULL AND
+                                                                     NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct1.THUOC_TINH_12))
+                                                                 OR (ctct1.THUOC_TINH_12 IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                                                               AND ((ctct1.THUOC_TINH_13 IS NOT NULL AND ht.DT_ID IS NOT NULL AND dt.MA = '00ZZ')
+                                                                 OR (ctct1.THUOC_TINH_13 IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.DT_ID, 'null'), '\w*|null')))
+                                                               AND ((ctct1.MA_LNV IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_LOAI_NV, 'null'), '\w*|null')) OR
+                                                                    (SUBSTR(ctct1.MA_LNV, 1, 3) = 'NOT' AND
+                                                                     ht.MA_LOAI_NV NOT IN (
+                                                                         SELECT *
+                                                                         FROM SPLIT(SUBSTR(ctct1.MA_LNV, 5), ',')
+                                                                     )) OR
+                                                                    (ctct1.MA_LNV IS NOT NULL AND
+                                                                     ht.MA_LOAI_NV IN (
+                                                                         SELECT *
+                                                                         FROM SPLIT(ctct1.MA_LNV, ',')
+                                                                     ))
+                                                                 )
+                                                               AND ((ctct1.TRONG_THOI_GIAN = 'TN' AND
+                                                                     ht.NGAY_HT BETWEEN ADD_MONTHS(
+                                                                             TRUNC(
+                                                                                     NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                     'YEAR'), 0)
+                                                                         AND ADD_MONTHS(
+                                                                                 TRUNC(
+                                                                                         NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                         'YEAR') - 1,
+                                                                                 12))
+                                                                 OR (ctct1.TRONG_THOI_GIAN = '<DN' AND
+                                                                     ht.NGAY_HT <
+                                                                     ADD_MONTHS(TRUNC(
+                                                                                        NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                        'YEAR'), 0))
+                                                                 OR (ctct1.TRONG_THOI_GIAN = '<CN' AND
+                                                                     ht.NGAY_HT <
+                                                                     ADD_MONTHS(TRUNC(
+                                                                                        NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                        'YEAR') - 1,
+                                                                                12)))
+                                                               AND ((ct.MA_LKP IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_LOAI_KP, 'null'), '\w*|null'))
+                                                                 OR
+                                                                    (ct.MA_LKP IS NOT NULL AND ht.MA_LOAI_KP = ct.MA_LKP))
+                                                               AND ((ct.MA_NKP IS NULL AND
+                                                                     REGEXP_LIKE(NVL(ht.MA_NGUON_KP, 'null'), '\w*|null'))
+                                                                 OR
+                                                                    (ct.MA_NKP IS NOT NULL AND ht.MA_NGUON_KP = ct.MA_NKP))
+                                                             GROUP BY ctct1.THUOC_TINH_1
+                                                         ), 0), '-', NVL((
+                                                                             SELECT DECODE(ctct1.THUOC_TINH_1, 'N',
+                                                                                           SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                                                                           'C',
+                                                                                           SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                                                                           'N-C',
+                                                                                           SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                                                                           'C-N',
+                                                                                           SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                                                                           0)
+                                                                             FROM TBD_TC_HT ht,
+                                                                                  TBS_DM_DT dt,
+                                                                                  TBS_SYS_BC_CHI_TIEU_CTHUC ctct1
+                                                                             WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                                                                               AND ht.DT_ID = dt.ID
+                                                                               AND ctct1.ID = ID_CTCT
+                                                                               AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct1.THUOC_TINH_9)))
+                                                                               AND ((ctct1.THUOC_TINH_10 IS NOT NULL AND
+                                                                                     REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct1.THUOC_TINH_10))
+                                                                                 OR (ctct1.THUOC_TINH_10 IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                                                                               AND ((ctct1.THUOC_TINH_11 IS NOT NULL AND
+                                                                                     NOT REGEXP_LIKE(ht.MA_TK, ctct1.THUOC_TINH_11))
+                                                                                 OR (ctct1.THUOC_TINH_11 IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                                                                               AND ((ctct1.THUOC_TINH_12 IS NOT NULL AND
+                                                                                     NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct1.THUOC_TINH_12))
+                                                                                 OR (ctct1.THUOC_TINH_12 IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                                                                               AND ((ctct1.THUOC_TINH_13 IS NOT NULL AND ht.DT_ID IS NOT NULL AND dt.MA = '00ZZ')
+                                                                                 OR (ctct1.THUOC_TINH_13 IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.DT_ID, 'null'), '\w*|null')))
+                                                                               AND ((ctct1.MA_LNV IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_LOAI_NV, 'null'), '\w*|null')) OR
+                                                                                    (SUBSTR(ctct1.MA_LNV, 1, 3) = 'NOT' AND
+                                                                                     ht.MA_LOAI_NV NOT IN (
+                                                                                         SELECT *
+                                                                                         FROM SPLIT(SUBSTR(ctct1.MA_LNV, 5), ',')
+                                                                                     )) OR
+                                                                                    (ctct1.MA_LNV IS NOT NULL AND
+                                                                                     ht.MA_LOAI_NV IN (
+                                                                                         SELECT *
+                                                                                         FROM SPLIT(ctct1.MA_LNV, ',')
+                                                                                     ))
+                                                                                 )
+                                                                               AND ((ctct1.TRONG_THOI_GIAN = 'TN' AND
+                                                                                     ht.NGAY_HT BETWEEN ADD_MONTHS(
+                                                                                             TRUNC(
+                                                                                                     NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                                     'YEAR'), 0)
+                                                                                         AND ADD_MONTHS(
+                                                                                                 TRUNC(
+                                                                                                         NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                                         'YEAR') - 1,
+                                                                                                 12))
+                                                                                 OR (ctct1.TRONG_THOI_GIAN = '<DN' AND
+                                                                                     ht.NGAY_HT <
+                                                                                     ADD_MONTHS(TRUNC(
+                                                                                                        NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                                        'YEAR'), 0))
+                                                                                 OR (ctct1.TRONG_THOI_GIAN = '<CN' AND
+                                                                                     ht.NGAY_HT <
+                                                                                     ADD_MONTHS(TRUNC(
+                                                                                                        NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                                                                        'YEAR') - 1,
+                                                                                                12)))
+                                                                               AND ((ct.MA_LKP IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_LOAI_KP, 'null'), '\w*|null'))
+                                                                                 OR
+                                                                                    (ct.MA_LKP IS NOT NULL AND ht.MA_LOAI_KP = ct.MA_LKP))
+                                                                               AND ((ct.MA_NKP IS NULL AND
+                                                                                     REGEXP_LIKE(NVL(ht.MA_NGUON_KP, 'null'), '\w*|null'))
+                                                                                 OR
+                                                                                    (ct.MA_NKP IS NOT NULL AND ht.MA_NGUON_KP = ct.MA_NKP))
+                                                                             GROUP BY ctct1.THUOC_TINH_1
+                                                                         ) * -1, 0)
+                       ))
+                   FROM (
+                            SELECT SUBSTR(t.COLUMN_VALUE, 2)    AS ID_CTCT,
+                                   SUBSTR(t.COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                            FROM SPLIT(ctct.THUOC_TINH_3, ',') t
+                        )
+               ))               AS SO_TIEN,
+               ct.THUOC_TINH_11 AS THUOC_TINH_11
+        FROM TBS_SYS_BC_CHI_TIEU ct,
+             TBS_SYS_BC_CHI_TIEU_CTHUC ctct
+        WHERE ct.ID = ctct.CHI_TIEU_ID
+          AND ct.MA_BAO_CAO = 'TCKT_BC_52'
+          AND ctct.THUOC_TINH_1 IS NULL
+          AND ctct.THUOC_TINH_3 IS NOT NULL
+        GROUP BY ct.ID, ct.CAP_TONG_HOP, ct.THUOC_TINH_11;
+
+
+        --Tinh chi tieu khong co cong thuc con
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  CAP_TONG_HOP,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_11)
+        SELECT ct.ID            AS ID,
+               ct.CAP_TONG_HOP  AS CAP_TONG_HOP,
+               (
+                   SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 'C',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                 'C-N',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 0)
+                   FROM TBD_TC_HT ht,
+                        TBS_DM_DT dt
+                   WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                     AND ht.DT_ID = dt.ID
+                     AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                     AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                           REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                       OR (ctct.THUOC_TINH_10 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                       OR (ctct.THUOC_TINH_11 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                       OR (ctct.THUOC_TINH_12 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_13 IS NOT NULL AND ht.DT_ID IS NOT NULL AND dt.MA = '00ZZ')
+                       OR (ctct.THUOC_TINH_13 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.DT_ID, 'null'), '\w*|null')))
+                     AND ((ctct.MA_LNV IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_LOAI_NV, 'null'), '\w*|null')) OR
+                          (SUBSTR(ctct.MA_LNV, 1, 3) = 'NOT' AND
+                           ht.MA_LOAI_NV NOT IN (
+                               SELECT *
+                               FROM SPLIT(SUBSTR(ctct.MA_LNV, 5), ',')
+                           )) OR
+                          (ctct.MA_LNV IS NOT NULL AND
+                           ht.MA_LOAI_NV IN (
+                               SELECT *
+                               FROM SPLIT(ctct.MA_LNV, ',')
+                           ))
+                       )
+                     AND ((ctct.TRONG_THOI_GIAN = 'TN' AND
+                           ht.NGAY_HT BETWEEN ADD_MONTHS(
+                                   TRUNC(
+                                           NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                           'YEAR'), 0)
+                               AND ADD_MONTHS(
+                                       TRUNC(
+                                               NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                               'YEAR') - 1,
+                                       12))
+                       OR (ctct.TRONG_THOI_GIAN = '<DN' AND
+                           ht.NGAY_HT <
+                           ADD_MONTHS(TRUNC(
+                                              NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                              'YEAR'), 0))
+                       OR (ctct.TRONG_THOI_GIAN = '<CN' AND
+                           ht.NGAY_HT <
+                           ADD_MONTHS(TRUNC(
+                                              NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                              'YEAR') - 1,
+                                      12)))
+                     AND ((ct.MA_LKP IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_LOAI_KP, 'null'), '\w*|null'))
+                       OR
+                          (ct.MA_LKP IS NOT NULL AND ht.MA_LOAI_KP = ct.MA_LKP))
+                     AND ((ct.MA_NKP IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_NGUON_KP, 'null'), '\w*|null'))
+                       OR
+                          (ct.MA_NKP IS NOT NULL AND ht.MA_NGUON_KP = ct.MA_NKP))
+                   GROUP BY ctct.THUOC_TINH_1
+               )                AS SO_TIEN,
+               ct.THUOC_TINH_11 AS THUOC_TINH_11
+        FROM TBS_SYS_BC_CHI_TIEU ct,
+             TBS_SYS_BC_CHI_TIEU_CTHUC ctct
+        WHERE ct.ID = ctct.CHI_TIEU_ID
+          AND ct.MA_BAO_CAO = 'TCKT_BC_52'
+          AND ctct.CHI_TIEU_ID IS NOT NULL
+          AND ctct.THUOC_TINH_9 IS NOT NULL;
+
+        -- tinh tong theo cap
+        SELECT MAX(ct.CAP_TONG_HOP)
+        INTO v_tong_cap
+        FROM TBS_SYS_BC_CHI_TIEU ct
+        WHERE ct.MA_BAO_CAO = 'TCKT_BC_52';
+
+        FOR v_index IN REVERSE 1..v_tong_cap
+            LOOP
+
+                INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                          CAP_TONG_HOP,
+                                          THUOC_TINH_20,
+                                          thuoc_tinh_11)
+                SELECT ct.ID,
+                       ct.CAP_TONG_HOP,
+                       SUM(NVL(dl.THUOC_TINH_20, 0)),
+                       ct.THUOC_TINH_11
+                FROM TBR_TC_BC_002 dl,
+                     TBS_SYS_BC_CHI_TIEU ct
+                WHERE dl.thuoc_tinh_11 = ct.ID
+                  AND dl.CAP_TONG_HOP = v_index
+                  AND ct.THUOC_TINH_2 IS NULL
+                  AND ct.MA_BAO_CAO = 'TCKT_BC_52'
+                GROUP BY ct.ID, ct.CAP_TONG_HOP, ct.THUOC_TINH_11;
+
+                SELECT COUNT(*)
+                INTO v_kiem_tra_khac_cap
+                FROM TBS_SYS_BC_CHI_TIEU ct
+                WHERE ct.CAP_TONG_HOP = v_index
+                  AND ct.MA_BAO_CAO = 'TCKT_BC_52'
+                  AND ct.THUOC_TINH_2 IS NOT NULL;
+
+                IF v_kiem_tra_khac_cap != 0 THEN
+
+                    -- tinh khac cap
+                    INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                              CAP_TONG_HOP,
+                                              THUOC_TINH_20)
+                    SELECT ct.ID,
+                           ct.CAP_TONG_HOP,
+                           SUM(NVL((
+                                       SELECT SUM(DECODE(PHEP_TOAN, '-', (
+                                                                             SELECT SUM(NVL(dl.THUOC_TINH_20, 0))
+                                                                             FROM TBR_TC_BC_002 dl
+                                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                                         ) * -1, '+', (
+                                                             SELECT SUM(NVL(dl.THUOC_TINH_20, 0))
+                                                             FROM TBR_TC_BC_002 dl
+                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                         ), 0))
+                                       FROM (
+                                                SELECT SUBSTR(COLUMN_VALUE, 2)    AS ID_CT,
+                                                       SUBSTR(COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                                                FROM SPLIT(ct.THUOC_TINH_2, ',')
+                                            )
+                                   ), 0))
+                    FROM TBS_SYS_BC_CHI_TIEU ct
+                    WHERE ct.CAP_TONG_HOP = v_index
+                      AND ct.THUOC_TINH_2 IS NOT NULL
+                      AND ct.MA_BAO_CAO = 'TCKT_BC_52'
+                    GROUP BY ct.ID, ct.CAP_TONG_HOP;
+                END IF;
+            END LOOP;
+    END;
+
+
+/*
+    -- Mã/Tên chức năng: TCKT_BC_41 –THUYẾT MINH BÁO CÁO TÀI CHÍNH
+    -- Người sửa: HoangV
+    -- Ngày sửa: 10/08/2021
+    */
+    PROCEDURE prc_thuyet_minh_bao_cao_tai_chinh(
+        p_ma_dvhq VARCHAR2,
+        p_nam DATE,
+        p_bang VARCHAR2
+    ) AS
+        v_tong_cap          NUMBER;
+        v_kiem_tra_khac_cap NUMBER;
+    BEGIN
+        --Tinh chi tieu chi tiet
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_21
+                                  )
+        SELECT ct.ID            AS ID,
+               nvl((
+                   SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 'C',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                 'C-N',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 0)
+                   FROM TBD_TC_HT ht,
+                        TBD_TC_DVHQ_KBNH kbnh,
+                        TBS_DM_KBNH dmkbnh
+                   WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                     AND ht.TKDT_NH_ID = kbnh.ID
+                     AND kbnh.KBNH_ID = dmkbnh.ID
+                     AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                     AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                           REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                       OR (ctct.THUOC_TINH_10 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                       OR (ctct.THUOC_TINH_11 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                       OR (ctct.THUOC_TINH_12 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_14 IS NOT NULL AND ht.TKDT_NH_ID IS NOT NULL AND dmkbnh.LOAI = ctct.THUOC_TINH_14)
+                       OR (ctct.THUOC_TINH_14 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.TKDT_NH_ID, 'null'), '\w*|null')))
+                     AND ht.NGAY_HT <
+                         ADD_MONTHS(TRUNC(
+                                            NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                            'YEAR') - 1,
+                                    12)
+                   GROUP BY ctct.THUOC_TINH_1
+               ),0)                AS so_cuoi_nam,
+               nvl((
+                   SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 'C',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                 SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                 'C-N',
+                                 SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                 0)
+                   FROM TBD_TC_HT ht,
+                        TBD_TC_DVHQ_KBNH kbnh,
+                        TBS_DM_KBNH dmkbnh
+                   WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                     AND ht.TKDT_NH_ID = kbnh.ID
+                     AND kbnh.KBNH_ID = dmkbnh.ID
+                     AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                     AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                           REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                       OR (ctct.THUOC_TINH_10 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                       OR (ctct.THUOC_TINH_11 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                           NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                       OR (ctct.THUOC_TINH_12 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                     AND ((ctct.THUOC_TINH_14 IS NOT NULL AND ht.TKDT_NH_ID IS NOT NULL AND dmkbnh.LOAI = ctct.THUOC_TINH_14)
+                       OR (ctct.THUOC_TINH_14 IS NULL AND
+                           REGEXP_LIKE(NVL(ht.TKDT_NH_ID, 'null'), '\w*|null')))
+                     AND ht.NGAY_HT <
+                         ADD_MONTHS(TRUNC(
+                                            NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                            'YEAR'), 0)
+                   GROUP BY ctct.THUOC_TINH_1
+               ),0)                AS so_dau_nam
+        FROM TBS_SYS_BC_CHI_TIEU ct,
+             TBS_SYS_BC_CHI_TIEU_CTHUC ctct
+        WHERE ct.ID = ctct.CHI_TIEU_ID
+          AND ct.MA_BAO_CAO = 'TCKT_BC_41'
+          AND ct.THUOC_TINH_13 = '2'
+          AND (p_bang IS NULL OR ct.THUOC_TINH_10 = p_bang)
+          AND ctct.THUOC_TINH_15 IS NULL
+          AND ctct.CHI_TIEU_ID IS NOT NULL
+          AND ctct.THUOC_TINH_9 IS NOT NULL;
+
+
+        --Tinh theo doi tuong
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_21
+        )
+        SELECT st.id,
+               nvl(SUM(decode(st.so_tien_cuoi_nam - abs(st.so_tien_cuoi_nam), 0, st.so_tien_cuoi_nam, 0)),0)      so_du_no_dau_nam,
+                nvl(SUM(decode(st.so_tien_dau_nam - abs(st.so_tien_dau_nam), 0, st.so_tien_dau_nam, 0)),0)      so_du_no_dau_nam
+        from  (SELECT ct.ID            AS ID,
+                      dttk.DTTK,
+                      SUM((
+                          SELECT
+                              DECODE(ctct.THUOC_TINH_1, 'N',
+                                     SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                     'C',
+                                     SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                     SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                     'C-N',
+                                     SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                     0)
+                          FROM TBD_TC_HT ht
+                          WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                            AND ht.DTTK = dttk.DTTK
+                            AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                            AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                                  REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                              OR (ctct.THUOC_TINH_10 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                            AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                                  NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                              OR (ctct.THUOC_TINH_11 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                            AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                                  NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                              OR (ctct.THUOC_TINH_12 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                            AND ht.NGAY_HT <
+                                ADD_MONTHS(TRUNC(
+                                                   NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                   'YEAR') - 1,
+                                           12)
+                          GROUP BY ht.DTTK,ctct.THUOC_TINH_1
+                      )) so_tien_cuoi_nam,
+                      SUM((
+                          SELECT
+                              DECODE(ctct.THUOC_TINH_1, 'N',
+                                     SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                     'C',
+                                     SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                     SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                     'C-N',
+                                     SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                     0)
+                          FROM TBD_TC_HT ht
+                          WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                            AND ht.DTTK = dttk.DTTK
+                            AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                            AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                                  REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                              OR (ctct.THUOC_TINH_10 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                            AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                                  NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                              OR (ctct.THUOC_TINH_11 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                            AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                                  NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                              OR (ctct.THUOC_TINH_12 IS NULL AND
+                                  REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                            AND ht.NGAY_HT <
+                                ADD_MONTHS(TRUNC(
+                                                   NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                   'YEAR'), 0)
+                          GROUP BY ht.DTTK,ctct.THUOC_TINH_1
+                      )) so_tien_dau_nam
+               FROM TBS_SYS_BC_CHI_TIEU ct,
+                    TBS_SYS_BC_CHI_TIEU_CTHUC ctct,
+                    (SELECT distinct ht.DTTK  FROM TBD_TC_HT ht WHERE ht.DTTK IS NOT NULL) dttk
+               WHERE ct.ID = ctct.CHI_TIEU_ID
+                 AND ct.MA_BAO_CAO = 'TCKT_BC_41'
+                 AND ct.THUOC_TINH_13 = '2'
+                 AND ctct.thuoc_tinh_15 = 'dt'
+                 AND ctct.CHI_TIEU_ID IS NOT NULL
+                 AND ctct.THUOC_TINH_9 IS NOT NULL
+               GROUP BY ct.ID, dttk.DTTK)st
+        where st.so_tien_cuoi_nam IS NOT NULL OR st.so_tien_dau_nam IS NOT NULL
+        GROUP BY st.id;
+
+        --Tinh bang III4
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_21)
+        SELECT tscd.ID,
+               SUM(decode(tscd.THUOC_TINH_15, 'hh', tscd.so_tien, 0)) TSCD_HUU_HINH,
+               SUM(decode(tscd.THUOC_TINH_15, 'vh', tscd.so_tien, 0)) TSCD_VO_HINH
+        FROM (SELECT ct.ID            AS ID,
+                     ct.CAP_TONG_HOP  AS CAP_TONG_HOP,
+                     (
+                         SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                       SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                       'C',
+                                       SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                       SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                       'C-N',
+                                       SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                       0)
+                         FROM TBD_TC_HT ht
+                         WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                           AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                           AND ((ctct.TRONG_THOI_GIAN = 'TN' AND
+                                 ht.NGAY_HT BETWEEN ADD_MONTHS(
+                                         TRUNC(
+                                                 NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                 'YEAR'), 0)
+                                     AND ADD_MONTHS(
+                                             TRUNC(
+                                                     NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                     'YEAR') - 1,
+                                             12))
+                             OR (ctct.TRONG_THOI_GIAN = 'DN' AND
+                                 ht.NGAY_HT <
+                                 ADD_MONTHS(TRUNC(
+                                                    NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                    'YEAR'), 0))
+                             OR (ctct.TRONG_THOI_GIAN = 'CN' AND
+                                 ht.NGAY_HT <
+                                 ADD_MONTHS(TRUNC(
+                                                    NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                    'YEAR') - 1,
+                                            12)))
+                         GROUP BY ctct.THUOC_TINH_1
+                     )                AS so_tien,
+                     ctct.thuoc_tinh_15
+              FROM TBS_SYS_BC_CHI_TIEU ct,
+                   TBS_SYS_BC_CHI_TIEU_CTHUC ctct
+              WHERE ct.ID = ctct.CHI_TIEU_ID
+                AND ct.MA_BAO_CAO = 'TCKT_BC_41'
+                AND ct.THUOC_TINH_13 = '3'
+                AND (p_bang IS NULL OR ct.THUOC_TINH_10 = p_bang)
+                AND ctct.CHI_TIEU_ID IS NOT NULL
+                AND ctct.THUOC_TINH_9 IS NOT NULL) tscd
+        GROUP BY tscd.ID;
+
+        --Tinh bang III15
+        INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                  THUOC_TINH_20,
+                                  THUOC_TINH_21,
+                                  THUOC_TINH_22,
+                                  THUOC_TINH_23)
+        SELECT bdcnv.ID,
+               SUM(decode(bdcnv.THUOC_TINH_15,'cl',bdcnv.so_tien,0)) CHENH_LECH_TY_GIA,
+               SUM(decode(bdcnv.THUOC_TINH_15,'td',bdcnv.so_tien,0)) THANG_DU,
+               SUM(decode(bdcnv.THUOC_TINH_15,'cq',bdcnv.so_tien,0)) CAC_QUY,
+               SUM(decode(bdcnv.THUOC_TINH_15,'cc',bdcnv.so_tien,0)) NGUON_CAI_CACH_TIEN_LUONG
+        FROM (SELECT ct.ID            AS ID,
+                     (
+                         SELECT DECODE(ctct.THUOC_TINH_1, 'N',
+                                       SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                       'C',
+                                       SUM(NVL(ht.SO_TIEN_VND_CO, 0)), 'N-C',
+                                       SUM(NVL(ht.SO_TIEN_VND_NO, 0)) - SUM(NVL(ht.SO_TIEN_VND_CO, 0)),
+                                       'C-N',
+                                       SUM(NVL(ht.SO_TIEN_VND_CO, 0)) - SUM(NVL(ht.SO_TIEN_VND_NO, 0)),
+                                       0)
+                         FROM TBD_TC_HT ht
+                         WHERE ht.MA_DVHQ = NVL('13ZZ', '00')
+                           AND ((ht.MA_TK IS NOT NULL AND REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_9)))
+                           AND ((ctct.THUOC_TINH_10 IS NOT NULL AND
+                                 REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_10))
+                             OR (ctct.THUOC_TINH_10 IS NULL AND
+                                 REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                           AND ((ctct.THUOC_TINH_11 IS NOT NULL AND
+                                 NOT REGEXP_LIKE(ht.MA_TK, ctct.THUOC_TINH_11))
+                             OR (ctct.THUOC_TINH_11 IS NULL AND
+                                 REGEXP_LIKE(NVL(ht.MA_TK, 'null'), '\w*|null')))
+                           AND ((ctct.THUOC_TINH_12 IS NOT NULL AND
+                                 NOT REGEXP_LIKE(ht.MA_TK_DOI_UNG, ctct.THUOC_TINH_12))
+                             OR (ctct.THUOC_TINH_12 IS NULL AND
+                                 REGEXP_LIKE(NVL(ht.MA_TK_DOI_UNG, 'null'), '\w*|null')))
+                           AND ((ctct.TRONG_THOI_GIAN = 'TN' AND
+                                 ht.NGAY_HT BETWEEN ADD_MONTHS(
+                                         TRUNC(
+                                                 NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                 'YEAR'), 0)
+                                     AND ADD_MONTHS(
+                                             TRUNC(
+                                                     NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                     'YEAR') - 1,
+                                             12))
+                             OR (ctct.TRONG_THOI_GIAN = 'DN' AND
+                                 ht.NGAY_HT <
+                                 ADD_MONTHS(TRUNC(
+                                                    NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                    'YEAR'), 0))
+                             OR (ctct.TRONG_THOI_GIAN = 'CN' AND
+                                 ht.NGAY_HT <
+                                 ADD_MONTHS(TRUNC(
+                                                    NVL(TO_DATE('2021', 'yyyy'), TO_DATE('1900', 'YYYY')),
+                                                    'YEAR') - 1,
+                                            12)))
+                         GROUP BY ctct.THUOC_TINH_1
+                     )                AS so_tien,
+                     ctct.thuoc_tinh_15
+              FROM TBS_SYS_BC_CHI_TIEU ct,
+                   TBS_SYS_BC_CHI_TIEU_CTHUC ctct
+              WHERE ct.ID = ctct.CHI_TIEU_ID
+                AND ct.MA_BAO_CAO = 'TCKT_BC_41'
+                AND ct.THUOC_TINH_13 = '5'
+                AND (p_bang IS NULL OR ct.THUOC_TINH_10 = p_bang)
+                AND ctct.CHI_TIEU_ID IS NOT NULL
+                AND ctct.THUOC_TINH_9 IS NOT NULL) bdcnv
+        GROUP BY bdcnv.ID;
+
+
+        -- tinh tong theo cap
+        SELECT MAX(ct.CAP_TONG_HOP)
+        INTO v_tong_cap
+        FROM TBS_SYS_BC_CHI_TIEU ct
+        WHERE ct.MA_BAO_CAO = 'TCKT_BC_41'
+          AND (p_bang IS NULL OR ct.THUOC_TINH_10 = p_bang);
+
+        FOR v_index IN REVERSE 1..v_tong_cap
+            LOOP             
+                    -- tinh khac cap
+                    INSERT INTO TBR_TC_BC_002(ID_CHI_TIEU,
+                                              CAP_TONG_HOP,
+                                              THUOC_TINH_20,
+                                              THUOC_TINH_21,
+                                              THUOC_TINH_22,
+                                              THUOC_TINH_23)
+                    SELECT ct.ID,
+                           ct.CAP_TONG_HOP,
+                           SUM(NVL((
+                                       SELECT SUM(DECODE(PHEP_TOAN, '-', (
+                                                                             SELECT SUM(NVL(dl.THUOC_TINH_20, 0))
+                                                                             FROM TBR_TC_BC_002 dl
+                                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                                         ) * -1, '+', (
+                                                             SELECT SUM(NVL(dl.THUOC_TINH_20, 0))
+                                                             FROM TBR_TC_BC_002 dl
+                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                         ), 0))
+                                       FROM (
+                                                SELECT SUBSTR(COLUMN_VALUE, 2)    AS ID_CT,
+                                                       SUBSTR(COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                                                FROM SPLIT(ct.THUOC_TINH_2, ',')
+                                            )
+                                   ), 0)),
+                               SUM(NVL((
+                                       SELECT SUM(DECODE(PHEP_TOAN, '-', (
+                                                                             SELECT SUM(NVL(dl.THUOC_TINH_21, 0))
+                                                                             FROM TBR_TC_BC_002 dl
+                                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                                         ) * -1, '+', (
+                                                             SELECT SUM(NVL(dl.THUOC_TINH_21, 0))
+                                                             FROM TBR_TC_BC_002 dl
+                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                         ), 0))
+                                       FROM (
+                                                SELECT SUBSTR(COLUMN_VALUE, 2)    AS ID_CT,
+                                                       SUBSTR(COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                                                FROM SPLIT(ct.THUOC_TINH_2, ',')
+                                            )
+                                   ), 0)),
+                           SUM(NVL((
+                                       SELECT SUM(DECODE(PHEP_TOAN, '-', (
+                                                                             SELECT SUM(NVL(dl.THUOC_TINH_22, 0))
+                                                                             FROM TBR_TC_BC_002 dl
+                                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                                         ) * -1, '+', (
+                                                             SELECT SUM(NVL(dl.THUOC_TINH_22, 0))
+                                                             FROM TBR_TC_BC_002 dl
+                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                         ), 0))
+                                       FROM (
+                                                SELECT SUBSTR(COLUMN_VALUE, 2)    AS ID_CT,
+                                                       SUBSTR(COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                                                FROM SPLIT(ct.THUOC_TINH_2, ',')
+                                            )
+                                   ), 0)),
+                           SUM(NVL((
+                                       SELECT SUM(DECODE(PHEP_TOAN, '-', (
+                                                                             SELECT SUM(NVL(dl.THUOC_TINH_23, 0))
+                                                                             FROM TBR_TC_BC_002 dl
+                                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                                         ) * -1, '+', (
+                                                             SELECT SUM(NVL(dl.THUOC_TINH_23, 0))
+                                                             FROM TBR_TC_BC_002 dl
+                                                             WHERE dl.ID_CHI_TIEU = ID_CT
+                                                         ), 0))
+                                       FROM (
+                                                SELECT SUBSTR(COLUMN_VALUE, 2)    AS ID_CT,
+                                                       SUBSTR(COLUMN_VALUE, 1, 1) AS PHEP_TOAN
+                                                FROM SPLIT(ct.THUOC_TINH_2, ',')
+                                            )
+                                   ), 0))
+                    FROM TBS_SYS_BC_CHI_TIEU ct
+                    WHERE ct.CAP_TONG_HOP = v_index
+                      AND ct.THUOC_TINH_2 IS NOT NULL
+                      AND ct.MA_BAO_CAO = 'TCKT_BC_41'
+                      AND (p_bang IS NULL OR ct.THUOC_TINH_10 = p_bang)
+                    GROUP BY ct.ID, ct.CAP_TONG_HOP;
+            END LOOP;
+    END;
+END pkg_bc_dong_tckt_hoang;
